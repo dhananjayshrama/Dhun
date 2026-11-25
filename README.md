@@ -27,10 +27,14 @@ A simple music streaming app built with **React Native**, **Expo** and **TypeScr
 
 ```
 Dhun/
-├── app.json                 Expo config (name, icon, splash)
+├── app.json                 Expo config (name, icon, splash, web settings)
 ├── package.json             Dependencies and scripts
 ├── tsconfig.json            TypeScript settings
+├── .gitignore               Files Git should skip
+├── .env                     API key (not committed)
+├── README.md                This file
 ├── assets/                  Images and icons
+├── scripts/                 Starter helper scripts (reset-project.js)
 └── src/
     ├── app/                 SCREENS (each file is a page)
     │   ├── _layout.tsx          Root layout, wraps app in PlayerProvider
@@ -41,33 +45,62 @@ Dhun/
     │       └── search.tsx       Search page
     ├── components/          REUSABLE UI
     │   ├── SongRow.tsx          One song in a list
-    │   └── MiniPlayer.tsx       Small player bar at the bottom
+    │   ├── MiniPlayer.tsx       Small player bar at the bottom
+    │   ├── themed-text.tsx      Starter helper (light/dark text)
+    │   └── themed-view.tsx      Starter helper (light/dark background)
     ├── context/
     │   └── PlayerContext.tsx    Global audio state and controls
     ├── services/
     │   └── musicApi.ts          All API calls (Jamendo)
     ├── types/
     │   └── music.ts             The Song type
-    ├── constants/ and hooks/    Theme helpers from the Expo starter
+    ├── constants/
+    │   └── theme.ts             Starter theme colors
+    └── hooks/
+        ├── use-color-scheme.ts       Starter helpers
+        ├── use-color-scheme.web.ts
+        └── use-theme.ts
 ```
 
-## How it works
+## File details
 
-1. **Screens** (`src/app`) display data and handle taps. Each file becomes a route through Expo Router.
-2. **`musicApi.ts`** is the only file that talks to the internet. It converts Jamendo's response into the app's own `Song` type. To switch to another API later, only this file needs to change.
-3. **`PlayerContext.tsx`** owns the single audio player for the whole app. It stores the current song, the queue, and the `playSong`, `toggle`, `next` and `prev` functions. Because it wraps the whole app, music keeps playing when you change tabs.
-4. **`SongRow`** and **`MiniPlayer`** are reusable pieces. `SongRow` is used on both Home and Search.
+### Root files
 
-### Data flow
+| File | What it does |
+|---|---|
+| `app.json` | App name, icon, splash screen and platform settings. For web, `"output": "single"` is set so the page renders only in the browser (the audio player does not work in server rendering). |
+| `package.json` | Lists dependencies (`expo`, `expo-router`, `expo-audio`, `react-native`, ...) and scripts such as `npm start`. |
+| `tsconfig.json` | TypeScript configuration. |
+| `.gitignore` | Tells Git to skip `node_modules`, `.expo` and `.env`. |
+| `.env` | Holds `EXPO_PUBLIC_JAMENDO_ID`. Never commit this file. |
 
-```
-Jamendo API → musicApi.ts → Home / Search screen → SongRow
-                                      │ tap
-                                      ▼
-                             PlayerContext.playSong()
-                                      │
-                      MiniPlayer  ◄───┴───►  Player screen
-```
+### Screens: `src/app/`
+
+Every file here becomes a route. Each one **must** have an `export default` component, or Expo Router shows an "Element type is invalid" error.
+
+| File | Route | What it does |
+|---|---|---|
+| `_layout.tsx` | root | Wraps the whole app in `PlayerProvider` and sets up a `Stack` navigator. The `player` screen opens as a modal. |
+| `(tabs)/_layout.tsx` | tabs | Creates the bottom tab bar (Home and Search) and shows `MiniPlayer` above it. The folder name in brackets means it does not appear in the URL. |
+| `(tabs)/index.tsx` | `/` | Home screen. Calls `getTrending()` on load, shows a loading spinner, then lists songs with `FlatList` and `SongRow`. Tapping a song calls `playSong`. |
+| `(tabs)/search.tsx` | `/search` | Search screen. A text input calls `searchSongs()` when you press Enter and lists the results. |
+| `player.tsx` | `/player` | Now Playing page. Shows big cover art, title, artist and the prev / play-pause / next buttons. A down arrow closes it. |
+
+### Components: `src/components/`
+
+| File | What it does |
+|---|---|
+| `SongRow.tsx` | One row in a song list: cover image, title and artist. Takes `song` and `onPress` props. Used on Home and Search. |
+| `MiniPlayer.tsx` | Small bar at the bottom showing the current song and a play/pause button. Tapping it opens the full player. Returns nothing when no song is playing. |
+| `themed-text.tsx`, `themed-view.tsx` | Starter helpers for light and dark mode. Not used by Dhun. Safe to delete together with `hooks/` and `constants/`. |
+
+### Logic
+
+| File | What it does |
+|---|---|
+| `context/PlayerContext.tsx` | The brain of the app. Creates one audio player with `useAudioPlayer`, stores the current song and queue, and exposes `playSong`, `toggle`, `next` and `prev` through the `usePlayer()` hook. Because it wraps the whole app, music keeps playing when you change tabs. |
+| `services/musicApi.ts` | The only file that talks to the internet. `getTrending()` and `searchSongs()` call Jamendo and convert each result into the app's `Song` type. To switch to another music API, only this file changes. |
+| `types/music.ts` | Defines the `Song` type used everywhere. |
 
 ### The Song type
 
@@ -81,6 +114,22 @@ type Song = {
   duration: number;  // seconds
 };
 ```
+
+## How it works
+
+```
+Jamendo API → musicApi.ts → Home / Search screen → SongRow
+                                      │ tap
+                                      ▼
+                             PlayerContext.playSong()
+                                      │
+                      MiniPlayer  ◄───┴───►  Player screen
+```
+
+1. A screen calls a function in `musicApi.ts` and gets a list of `Song` objects.
+2. The list is shown with `SongRow` components.
+3. Tapping a row calls `playSong(song, list)`. The context loads the audio URL, starts playback and remembers the list as the queue.
+4. `MiniPlayer` and the `player` screen read the same state through `usePlayer()`, so they always stay in sync.
 
 ## Getting started
 
@@ -99,11 +148,17 @@ npm install
 # 2. Install the audio package
 npx expo install expo-audio
 
-# 3. Add your Jamendo client_id in src/services/musicApi.ts
-#    const CLIENT_ID = 'YOUR_JAMENDO_CLIENT_ID';
+# 3. Create a .env file in the project root
+EXPO_PUBLIC_JAMENDO_ID=your_client_id
 
-# 4. Start the app
-npm start
+# 4. Start the app (clear cache)
+npx expo start -c
+```
+
+In `src/services/musicApi.ts`, read the key with:
+
+```ts
+const CLIENT_ID = process.env.EXPO_PUBLIC_JAMENDO_ID;
 ```
 
 Then press `w` to open in the browser, or scan the QR code with Expo Go (phone and PC must be on the same Wi-Fi). If the QR code does not connect, try `npx expo start --tunnel`.
@@ -116,6 +171,19 @@ Then press `w` to open in the browser, or scan the QR code with Expo Go (phone a
 | `npm run android` | Open on an Android device or emulator |
 | `npm run ios` | Open on an iOS simulator (macOS only) |
 | `npm run web` | Open in the browser |
+
+Always use `npx expo ...` instead of a global `expo` command.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `Missing script: "dev"` | This is an Expo project. Use `npm start`. |
+| `Element type is invalid` or `missing the required default export` | A file in `src/app` is empty or has no `export default`. Check file sizes with `dir src\app /s`. |
+| Red line on an import | The imported file is empty or in the wrong folder. Save it, then run **TypeScript: Restart TS Server**. |
+| `Audio is not defined` | Set `"output": "single"` under `"web"` in `app.json`. |
+| Empty Home screen | Missing or wrong Jamendo `client_id`. |
+| Legacy `expo-cli` warning | Run `npm uninstall -g expo-cli` and use `npx expo`. |
 
 ## Known limitations
 
@@ -132,11 +200,10 @@ Then press `w` to open in the browser, or scan the QR code with Expo Go (phone a
 - [ ] Playlists
 - [ ] Shuffle and repeat
 - [ ] Background playback and lock-screen controls
-- [ ] Move the API key into an `.env` file
 
 ## Security note
 
-Do not commit your Jamendo `client_id` to a public repository. Move it into an `.env` file (for example `EXPO_PUBLIC_JAMENDO_ID`) and add that file to `.gitignore` before pushing to GitHub.
+Do not commit your Jamendo `client_id` to a public repository. Keep it in `.env` and make sure `.env` is listed in `.gitignore` before pushing to GitHub.
 
 ## Credits
 
